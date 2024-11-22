@@ -1,0 +1,608 @@
+---
+title: "H3 Data Analysis"
+author: "Yujia"
+date: "`r Sys.Date()`"
+format:
+  pdf:
+    toc: true
+    toc-depth: 2
+    number-sections: true
+    code-overflow: wrap
+    documentclass: article
+    margin-left: 0.75in
+    margin-right: 0.75in
+    margin-top: 1in
+    margin-bottom: 1in
+output-dir: output
+---
+
+## 
+
+```{r include=FALSE}
+
+# Load the libraries
+library(tidyverse)
+library(car)
+library(ggplot2)
+library(lmtest)
+library(PerformanceAnalytics)
+library(dplyr)
+library(stringr)
+library(ggcorrplot)
+
+```
+
+# Load the Data
+
+1.**Dataset Description**
+
+The dataset used in this study provides a comprehensive view of FinTech companies, focusing on their intellectual property and market performance indicators. It includes information on patents, trademarks, and CB (Crunchbase) rank, which are critical factors for understanding innovation and competitiveness within the FinTech industry. These variables allow for an in-depth exploration of how intellectual property investments and other attributes influence a company's market position and success.
+
+Key Features:
+
+1)Patents:
+
+This variable represents the number of patents granted to each company. Patents are a direct measure of innovation and technological advancements, providing legal protection for unique inventions and processes. In this study, we use patent data to understand how innovation correlates with a company's CB rank.
+
+2)Trademarks:
+
+This variable reflects the number of trademarks registered by each company. Trademarks are essential for establishing a company’s brand identity and protecting intellectual property associated with branding. The analysis will explore whether a stronger brand presence, as indicated by trademarks, impacts market competitiveness.
+
+3)CB Rank:
+
+Crunchbase rank is a metric that evaluates a company’s overall standing based on its popularity, funding, and other performance indicators. A lower CB rank (e.g., rank 1) signifies a higher-performing company. This metric is used as the dependent variable in the analysis, reflecting a company’s market position.
+
+Control Variables:
+
+In addition to patents, trademarks, and CB rank, the dataset includes other critical attributes:
+
+1)Age of the Company: The number of years since the company’s establishment, used to assess whether older companies perform differently compared to newer ones.
+
+2)Number of Employees: A measure of company size, reflecting operational scale and resources.
+
+3)Estimated Revenue: Approximate revenue ranges to gauge financial performance and market reach.
+
+Industry Categories: Binary indicators of specific industries (e.g., Payments, Lending, Blockchain), which help capture the diversity within the FinTech sector.
+
+Research :
+
+This analysis aligns with the hypothesis (H3) that companies investing more in intellectual property, such as patents and trademarks, will achieve a higher CB rank (indicating better performance). The results will offer valuable insights for FinTech stakeholders, including investors, policymakers, and company executives, to optimize strategies around innovation and branding.The dataset contains information about FinTech companies.
+
+```{r include=FALSE}
+# Specify the file path
+file_path <- "D:/JADS/MasterS1/SBM/Group_Assignment/Data/Crunchbase/Fintech/FinTechCompanies.csv"
+
+# Load the CSV file
+data <- read.csv(file_path)
+```
+
+# Pick the related key variables
+
+```{r colnames, echo=TRUE}
+
+colnames(data) <- str_trim(colnames(data))
+
+colnames(data)
+
+```
+
+2.  **Key Variables for H3**:
+
+-   Independent Variables (Predictors):
+    -   Patent Count: Total number of patents a company holds.
+    -   Trademark Count: Total number of trademarks registered by the company.
+-   Dependent Variable (Outcome):
+    -   CB Rank: A numerical ranking of a company’s visibility and importance on Crunchbase.
+-   Control Variables (to reduce bias):
+    -   Company Size (e.g., number of employees, revenue).
+
+    -   Age of the Company (e.g., years since founding).
+
+    -   Industry Type (categorical variable to account for differences in industry .
+
+```{r}
+selected_data <- data %>%
+  select(
+    `CB.Rank..Organization.`, 
+    `IPqwery...Patents.Granted`, 
+    `IPqwery...Trademarks.Registered`, 
+    `Number.of.Employees`, 
+    `Estimated.Revenue.Range`, 
+    `Age`, 
+    `Industries`
+  ) 
+
+summary(selected_data)
+```
+
+# Data Cleaning and Transformation
+
+As we can see from the output of str() , many of the fields are recognized as type character but may actually need to be converted to a more appropriate type, they Should be converted to numeric type for subsequent analysis.
+
+1.  **Data transformation**:
+
+-   Convert relevant columns to numeric type for analysis.
+
+```{r }
+selected_data$IPqwery...Patents.Granted <- as.numeric(
+  selected_data$IPqwery...Patents.Granted)
+
+selected_data$IPqwery...Trademarks.Registered <- as.numeric(
+  selected_data$IPqwery...Trademarks.Registered)
+
+selected_data$Age <- as.numeric(selected_data$Age)
+
+# Encode Number.of.Employees as a factor
+selected_data$Number.of.Employees <- factor(
+  selected_data$Number.of.Employees,
+  levels = c("Nov-50", "51-100",                                                "100 -250", "251-500", "501-1000"                                               ,"1001-5000", "5001-10000", "10001+"                                               ),ordered = TRUE) 
+
+# Encode Estimated.Revenue.Range as a factor
+selected_data$Estimated.Revenue.Range <- factor(
+selected_data$Estimated.Revenue.Range,
+levels = c("Less than $1M", "$1M to $10M", 
+           "$10M to $50M", "$50M to $100M", 
+           "$100M to $500M", "$500M to $1B",
+           "$1B to $10B", "More than $10B"),ordered = TRUE) 
+
+```
+
+```{r results='markup'}
+# Check the structure of the transformed data
+# View the structure and levels of factors
+levels(selected_data$Number.of.Employees)
+levels(selected_data$Estimated.Revenue.Range)
+
+# Check the overall data structure
+str(selected_data)
+```
+
+**2.Data Cleaning:**
+
+1)Check for missing values
+
+```{r results='markup'}
+# Check for missing values
+summary(selected_data)
+```
+
+2)Check the proportion of missing values
+
+```{r}
+
+missing_percentage <- colSums(is.na(selected_data)) / nrow(selected_data) * 100
+print(missing_percentage)
+
+```
+
+Data Preprocessing
+
+To ensure the dataset's completeness and reliability for analysis, the following preprocessing steps were applied to handle missing values in key variables:
+
+1). Patents and Trademarks  
+
+   The variables \*IPqwery…Patents.Granted\* and \*IPqwery…Trademarks.Registered\* reflect the number of patents and trademarks associated with each company. Missing values in these fields were interpreted as the absence of patents or trademarks. This assumption is based on the understanding that companies without records in these categories likely do not possess such intellectual property. Therefore, all missing values in these fields were replaced with \`0\`.
+
+```{r}
+# Replace NA values with 0
+
+selected_data$IPqwery...Patents.Granted[is.na(
+  selected_data$IPqwery...Patents.Granted)] <- 0
+selected_data$IPqwery...Trademarks.Registered[is.na(
+  selected_data$IPqwery...Trademarks.Registered)] <- 0
+```
+
+2). Number of Employees and Estimated Revenue Range  
+
+   The variables \*Number.of.Employees\* and \*Estimated.Revenue.Range\* are critical indicators of company size and financial performance. Given their importance, removing rows with missing values or arbitrarily assigning them to \`0\` could result in significant bias or loss of valuable information.  
+
+   To address this, the missing values in these fields were filled using the median or mean of the respective variable. This approach minimizes distortion while preserving the representativeness of the data, as it maintains consistency with the central tendency of the dataset.
+
+By applying these preprocessing techniques, the dataset was standardized for analysis, ensuring that all key variables were properly accounted for without compromising their interpretability or business relevance.
+
+```{r}
+
+# Convert the factor to a numeric type, representing the level
+selected_data$Number.of.Employees.Numeric <- as.numeric(
+  selected_data$Number.of.Employees)
+selected_data$Estimated.Revenue.Range.Numeric <- as.numeric(
+  selected_data$Estimated.Revenue.Range)
+
+# Create missing value flag variable
+selected_data$Employees_NA <- ifelse(is.na(
+  selected_data$Number.of.Employees), 1, 0)
+selected_data$Revenue_NA <- ifelse(is.na(
+  selected_data$Estimated.Revenue.Range), 1, 0)
+
+# Create a new dataset and transform Number.of.Employees and Estimated.Revenue.Range
+new_data <- selected_data %>%
+  mutate(
+    # Convert Number.of.Employees to an intermediate value
+    Number.of.Employees.Numeric = case_when(
+      Number.of.Employees == "Nov-50" ~ 25,
+      Number.of.Employees == "51-100" ~ 75,
+      Number.of.Employees == "101-250" ~ 175,
+      Number.of.Employees == "251-500" ~ 375,
+      Number.of.Employees == "501-1000" ~ 750,
+      Number.of.Employees == "1001-5000" ~ 3000,
+      Number.of.Employees == "5001-10000" ~ 7500,
+      Number.of.Employees == "10001+" ~ 10001,
+      TRUE ~ NA_real_ 
+    ),
+    # Convert Estimated.Revenue.Range to intermediate values
+    Estimated.Revenue.Range.Numeric = case_when(
+      Estimated.Revenue.Range == "Less than $1M" ~ 0.5,
+      Estimated.Revenue.Range == "$1M to $10M" ~ 5,
+      Estimated.Revenue.Range == "$10M to $50M" ~ 30,
+      Estimated.Revenue.Range == "$50M to $100M" ~ 75,
+      Estimated.Revenue.Range == "$100M to $500M" ~ 300,
+      Estimated.Revenue.Range == "$500M to $1B" ~ 750,
+      Estimated.Revenue.Range == "$1B to $10B" ~ 5000,
+      Estimated.Revenue.Range == "More than $10B" ~ 10000,
+      TRUE ~ NA_real_ # Unmatched values are set to NA
+    )
+  )
+
+# Fill missing values of Number.of.Employees.Numeric
+new_data$Number.of.Employees.Numeric[is.na(
+  new_data$Number.of.Employees.Numeric)] <- 
+  median(new_data$Number.of.Employees.Numeric, na.rm = TRUE)
+
+
+new_data$Estimated.Revenue.Range.Numeric[is.na(
+  new_data$Estimated.Revenue.Range.Numeric)] <- 
+  median(new_data$Estimated.Revenue.Range.Numeric, na.rm = TRUE)
+
+```
+
+```{r}
+summary(new_data)
+```
+
+# **Visualize Variables**
+
+To gain a comprehensive understanding of the dataset, the following exploratory steps were conducted:
+
+1\. Visualization of Variable Distributions  
+
+The distributions of key variables were visualized to identify their underlying patterns and characteristics. This step provided insights into the spread, central tendencies, and potential skewness of the data, particularly for variables such as \*IPqwery…Patents.Granted\*, \*IPqwery…Trademarks.Registered\*, \*Number.of.Employees\*, and \*Estimated.Revenue.Range\*. These visualizations aided in detecting outliers and assessing data completeness.
+
+2\. Exploration of Relationships Between Variables  
+
+   Pairwise analyses were performed to examine relationships and potential correlations among the variables. This exploration aimed to identify meaningful patterns, such as how the number of patents or trademarks relates to \*CB Rank\*, or how company size and revenue estimates influence rankings. Understanding these relationships helped inform the selection of variables for subsequent analyses and modeling efforts.
+
+This exploration phase served as a foundation for identifying key trends and ensuring the dataset was appropriately structured for further statistical and predictive modeling.
+
+## **A. Distributions for Variables**
+
+1.Histograms: View the distribution of numerical variable.
+
+```{r}
+# Histogram: View the distribution of each numerical variable
+ggplot(new_data, aes(x = IPqwery...Patents.Granted)) +
+  geom_histogram(bins = 30, fill = "orange", alpha = 0.7) +
+  labs(title = "Distribution of Patents Granted", 
+       x = "Number of Patents", y = "Frequency") +
+  theme_minimal()
+
+ggplot(new_data, aes(x = IPqwery...Trademarks.Registered)) +
+  geom_histogram(bins = 30, fill = "green", alpha = 0.7) +
+  labs(title = "Distribution of Trademarks Registered", 
+       x = "Number of Trademarks", y = "Frequency") +
+  theme_minimal()
+```
+
+**Output:**
+
+Output: The distribution of patents granted(Figure1) and trademarks registered(Figure2) exhibits a highly skewed pattern. The majority of companies hold no or very few patents and trademarks, while a small subset of companies demonstrates significantly higher numbers (e.g., 200+). This indicates a long-tail distribution, where intellectual property (IP) resources are concentrated in a few firms.
+
+The high proportion of zero values suggests that many companies in the dataset may not prioritize IP investment.However, companies with substantial IP resources might have a significant advantage, aligning with the hypothesis that greater IP investment correlates with higher CB Rank.
+
+To address the skewed distribution and ensure robust regression analysis, log transformation or standardization of these variables is recommended.Further scatter plots and correlation analysis will help confirm the relationship between IP investments and market rank.
+
+2.Visualization of ordered factor variables (Ord.factor)
+
+```{r}
+ggplot(new_data, aes(x = Number.of.Employees)) +
+  geom_bar(fill = "purple", alpha = 0.7) +
+  labs(title = "Distribution of Employee Ranges", 
+       x = "Employee Ranges", y = "Count") +
+  theme_minimal()
+
+ggplot(new_data, aes(x = Estimated.Revenue.Range)) +
+  geom_bar(fill = "cyan", alpha = 0.7) +
+  labs(title = "Distribution of Revenue Ranges", 
+       x = "Revenue Ranges", y = "Count") +
+  theme_minimal()
+```
+
+**Output:**
+
+The distribution of employee ranges (Figure 1) reveals that the majority of companies have fewer than 50 employees, indicating that the dataset predominantly represents smaller companies. Similarly, the distribution of revenue ranges (Figure 2) shows that most companies generate less than \$10M annually, with few high-revenue firms. Both variables exhibit a long-tail distribution.
+
+The large proportion of missing values (NA) in both variables warrants careful handling to ensure data integrity. Imputation or removal of missing values is recommended to avoid skewing the regression results.
+
+These findings suggest a potential bias toward smaller and lower-revenue firms in the dataset. This skewness and the high concentration of values in the lower ranges may influence the relationship between these variables and company rankings (CB Rank). Appropriate transformations or group-level analyses are suggested to improve the robustness of the regression model.
+
+3.  Visualization of categorical variables (character)
+
+For the categorical variable Industries, its distribution can be displayed through a bar chart.
+
+```{r}
+# Bar chart: Shows the frequency of each Industry
+ggplot(new_data, aes(x = Industries)) +
+  geom_bar(fill = "darkblue", alpha = 0.7) +
+  labs(title = "Distribution of Industries", x = "Industry", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+There are too many values for the industry variable, so only the first 10 can be displayed by sorting by frequency.
+
+```{r}
+top_industries <- as.data.frame(table(new_data$Industries)) %>%
+  arrange(desc(Freq)) %>%
+  head(10)
+
+ggplot(top_industries, aes(x = reorder(Var1, -Freq), y = Freq)) +
+  geom_bar(stat = "identity", fill = "darkblue", alpha = 0.7) +
+  labs(title = "Top 10 Industries", x = "Industry", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+**Output:**
+
+The initial visualization of industry distribution (Figure 1) revealed a high level of complexity due to the large number of industry categories. To improve interpretability, we focused on the top 10 most frequent industries (Figure 2). The results indicate that the dataset is heavily dominated by financial technology (FinTech) and related sectors, such as financial services, payments, and banking. The top industry category, "Financial Services, FinTech," accounts for nearly 1,000 observations, highlighting its prominence in the dataset. Other high-frequency industries include "Finance, Financial Services, FinTech" and "FinTech," further confirming the dominance of financial technology companies. These findings suggest a strong concentration of companies in the FinTech space, which should be considered in subsequent regression analyses. Incorporating industry categories as dummy variables in the model may reveal their impact on the target variable, CB Rank. Additional exploration of industry-specific characteristics, such as employee size and revenue, is recommended to better understand the drivers behind industry performance.
+
+4.Relationships Between Variables Scatter plots can show relationships between numeric variables, such as CB Rank and Patents/Trademarks.
+
+```{r}
+# CB Rank vs. Patents Granted
+ggplot(new_data, aes(x = IPqwery...Patents.Granted, y = as.numeric(CB.Rank..Organization.))) +
+  geom_point(alpha = 0.5, color = "orange") +
+  labs(title = "CB Rank vs Patents Granted", 
+       x = "Number of Patents", y = "CB Rank") +
+  theme_minimal()
+
+# CB Rank vs. Trademarks Registered
+ggplot(new_data, aes(x = IPqwery...Trademarks.Registered, y = as.numeric(CB.Rank..Organization.))) +
+  geom_point(alpha = 0.5, color = "pink") +
+  labs(title = "CB Rank vs Trademarks Registered", 
+       x = "Number of Trademarks", y = "CB Rank") +
+  theme_minimal()
+
+```
+
+**Output:**
+
+Figures 1 and 2 illustrate the relationship between CB Rank and two key intellectual property indicators: patents granted and trademarks registered. Both plots show highly skewed distributions, with the majority of companies having very few or no patents and trademarks. Notably, companies with high CB Rank (lower numerical values) tend to cluster around low patent and trademark counts, indicating that the quantity of patents or trademarks alone does not directly correlate with rank.
+
+A small number of outliers, representing companies with exceptionally high patent or trademark counts, may have contributed to their higher CB Rank, but their influence on the overall trend is limited. These findings suggest that intellectual property measures might be significant factors for ranking only under specific conditions, warranting further exploration in regression analysis.
+
+To enhance model performance, it is recommended to preprocess these variables (e.g., log transformation) and investigate potential non-linear or interaction effects with other predictors. Additional analyses, such as correlation matrices, can provide insights into the relationships between variables and guide feature selection for regression modeling.
+
+5.Check the correlation between numerical variables Calculate the correlation coeﬀicient matrix and draw a heat map to check the correlation between variables.
+
+```{r}
+# Calculate the correlation
+numeric_vars <- new_data %>% select(
+  IPqwery...Patents.Granted, IPqwery...Trademarks.Registered, 
+  Number.of.Employees.Numeric, Estimated.Revenue.Range.Numeric)
+
+cor_matrix <- cor(numeric_vars, use = "complete.obs")
+
+
+ggcorrplot(cor_matrix, lab = TRUE, title = "Correlation Matrix")
+```
+
+**Output:**
+
+The correlation matrix highlights notable relationships among key numerical variables in the dataset. Patents granted and trademarks registered show a moderate positive correlation (0.40), reflecting a shared focus on intellectual property investments by certain companies. Estimated revenue and the number of employees also exhibit a moderate positive correlation (0.37), suggesting a potential trend where larger companies with more employees generate higher revenues.
+
+However, other relationships, such as between patents and revenue (0.21) or patents and employees (0.17), are weaker, indicating that patents might not directly impact these metrics or are influenced by other factors. The overall low correlations suggest that these variables are relatively independent, which minimizes multicollinearity concerns for regression modeling.
+
+These insights provide a strong foundation for further analysis, particularly exploring the role of intellectual property in company performance and its interaction with other predictors. The correlation matrix can guide variable selection and transformation strategies to enhance the regression model's predictive power and interpretability.
+
+# Data Processing for regression analysis
+
+To start processing and preparing `regression_data` for regression analysis, we need to complete the following steps:
+
+1.  Filter the required columns We will only keep the required columns:
+
+-   `CB.Rank..Organization.` as the dependent variable
+-   `IPqwery...Patents.Granted`
+-   `IPqwery...Trademarks.Registered`
+-   `Age`
+-   `Industries`
+-   `Number.of.Employees.Numeric`
+-   `Estimated.Revenue.Range.Numeric`
+
+2.  Convert `CB.Rank..Organization.` variable to numeric This column is of character type and needs to be converted to numeric type.
+
+3.  Log transform columns with highly skewed distribution We will perform `log1p` transformation on the following columns:
+
+-   `IPqwery...Patents.Granted`
+-   `IPqwery...Trademarks.Registered`
+
+4.  Process the `Industries` column `Industries` is a character type, and the following two methods can be used:
+
+-   **One-hot encoding**: Convert different industries to dummy variable columns.
+-   **Label encoding**: Give integer labels to industry categories.
+
+5. Standardization of Variables
+
+Standardization was applied to variables with differing scales (e.g., number of patents, trademarks, and age). This step was critical to ensure variables with larger scales did not disproportionately influence the model. Standardization also aligned with the requirements of linear regression, improving the comparability and stability of the regression coefficients.
+
+These preprocessing steps established a clean and structured dataset, minimizing the risk of bias or errors during the regression analysis.
+
+```{r}
+# Step 1: Filter required columns and drop NAs in dependent variable
+regression_data <- new_data %>%
+  select(
+    CB.Rank..Organization., IPqwery...Patents.Granted,
+    IPqwery...Trademarks.Registered, Age, Industries,
+    Number.of.Employees.Numeric, Estimated.Revenue.Range.Numeric
+  ) %>%
+  mutate(CB_Rank = as.numeric(CB.Rank..Organization.)) %>%
+  filter(!is.na(CB_Rank)) %>%  
+  select(-CB.Rank..Organization.)
+
+# Step 2: Log transform skewed columns
+regression_data <- regression_data %>%
+  mutate(
+    Log_Patents = log1p(IPqwery...Patents.Granted),
+    Log_Trademarks = log1p(IPqwery...Trademarks.Registered)
+  ) %>%
+  select(-IPqwery...Patents.Granted, -IPqwery...Trademarks.Registered)
+
+# Step 3: Split multi-value Industries column into individual categories
+# Separate multiple values in the Industries column
+regression_data <- regression_data %>%
+  mutate(Industries = strsplit(as.character(Industries), ",\\s*")) %>% 
+  # Separate industries by commas
+  unnest(Industries) %>%  # Expand the list to multiple lines
+  mutate(Industries = trimws(Industries))  
+
+# Step 4: One-hot encoding for Industries column
+regression_data <- regression_data %>%
+  mutate(Industries = as.factor(Industries)) %>%
+  pivot_wider(
+    names_from = Industries,
+    values_from = Industries,
+    values_fn = length,
+    values_fill = 0
+  )
+
+regression_data <- regression_data %>%
+  mutate(across(c(Log_Patents, Log_Trademarks, 
+                  Age, Number.of.Employees.Numeric, 
+                  Estimated.Revenue.Range.Numeric), scale))
+
+
+regression_data <- regression_data %>% drop_na(CB_Rank)
+```
+
+# Regression Analysis
+
+Regression Modeling Create a linear regression model to analyze the relationship between CB Rank and the independent variables (patents, trademarks, etc.): Dependent variable: CB Rank (you can use CB_Rank directly, note that it is a continuous variable, smaller values indicate higher ranking) Independent variables: Log_Patents, Log_Trademarks, Age, Number.of.Employees.Numeric, Estimated.Revenue.Range.Numeric
+
+```{r}
+model <- lm(CB_Rank ~ Log_Patents + Log_Trademarks + Age 
+            + Number.of.Employees.Numeric + Estimated.Revenue.Range.Numeric,
+            
+            data = regression_data)
+
+
+summary(model)
+```
+
+### Overall model evaluation:
+
+**Multiple R-squared**: 0.0437 Explained 4.37% of the variance in the dependent variable (CB_Rank). This is a very low value, indicating that this model has weak explanatory power for predicting CB_Rank.
+
+**Adjusted R-squared**: 0.01026 The adjusted R² is only 1.03%, which also shows that the model is very limited in predicting CB_Rank.
+
+**F-statistic**: 1.307 (p-value = 0.2643) The F-test of the model as a whole shows that the p-value is greater than 0.05, indicating that all independent variables together have an insignificant effect on the dependent variable. This may mean that the selected variables cannot explain CB_Rank well, or that the model needs to introduce more important variables.
+
+**Significant variables**: Number.of.Employees.Numeric is the only significant variable with a coefficient of -77.99, indicating that an increase in the number of employees leads to a lower CB_Rank (higher ranking). This may reflect the fact that larger companies generally have higher market influence and ranking.
+
+**Non-significant variables**: The p-values of patents (Log_Patents) and trademarks (Log_Trademarks) are both greater than 0.05, indicating that these IP investment indicators have no significant impact on CB_Rank. Age (Age) and income (Estimated.Revenue.Range.Numeric) also do not significantly affect CB_Rank.
+
+**conclusion** : Hypothesis H3 was not supported: From the regression analysis, investing in more IP (patents and trademarks) did not show a significant correlation with higher CB_Rank. Number of employees is the only significant variable: companies with more employees are more likely to have higher market rankings.
+
+Improvement : Introduce more variables that may be related to CB_Rank, such as the company's industry, region, R&D investment, etc. Do further exploratory analysis on CB_Rank to consider whether it needs to be grouped or transformed in more detail.
+
+We can continue to try to see if classification regression analysis will have an impact
+
+# Logistic Regression for Classification Analysis
+
+To enhance the interpretability of CB Rank in the regression analysis, the variable was transformed into a categorical classification with three distinct groups: High, Medium, and Low rankings. Companies were classified based on their CB Rank values, where those with a rank of 100 or lower were categorized as "High," those ranked between 101 and 500 were categorized as "Medium," and those ranked above 500 were classified as "Low." This transformation allowed for the application of a multi-class logistic regression model to examine the factors influencing the likelihood of a company falling into each ranking group.
+
+The logistic regression model utilized the transformed categorical CB Rank variable as the dependent variable, while the independent variables included log-transformed values for patents and trademarks, company age, the number of employees, and the estimated revenue range. The log transformation was applied to address the highly skewed distribution of the patent and trademark variables, ensuring better model performance. By categorizing CB Rank and analyzing its relationship with key company attributes, this approach provides valuable insights into how various factors influence a company’s standing within the ranking system. This method is particularly effective for identifying patterns or characteristics associated with each ranking group.
+
+The steps are as follows:
+
+(1) Convert CB Rank into a categorical variable
+
+```{r}
+regression_data <- regression_data %>%
+  mutate(CB_Rank_Class = case_when(
+    CB_Rank <= 100 ~ "High",
+    CB_Rank <= 500 ~ "Medium",
+    TRUE ~ "Low"
+  )) %>%
+  mutate(CB_Rank_Class = factor(CB_Rank_Class, 
+                                levels = c("High", "Medium", "Low")))
+
+```
+
+(2) Build a multi-classification Logistic Regression model
+
+```{r}
+library(nnet)
+
+model <- multinom(CB_Rank_Class ~ Log_Patents + Log_Trademarks + Age +
+                    Number.of.Employees.Numeric + Estimated.Revenue.Range.Numeric+
+                    ., data = regression_data)
+summary(model)
+```
+
+(3) Evaluation model
+
+```{r}
+predicted <- predict(model, regression_data)
+table(predicted, regression_data$CB_Rank_Class)
+```
+
+# Conclusion for H3
+
+### **Evaluation of H3 Hypothesis**
+
+**Hypothesis (H3):** Companies that invest more in IP (have more patents and trademarks) will have a higher CB rank.
+
+1.  **Model Summary**
+    -   The multinomial logistic regression was conducted to predict CB rank class ("High", "Medium", "Low") using patents, trademarks, age, number of employees, revenue range, and industry variables (one-hot encoded).\
+    -   The model converged successfully, with a residual deviance close to zero and an AIC of 380.\
+    -   However, despite the model's statistical fit, certain coefficients (e.g., for patents and trademarks) were not significant, indicating weak evidence to support their direct effect on CB rank class.
+2.  **Key Findings**
+    -   **Patents and Trademarks:**\
+        The coefficients for `Log_Patents` and `Log_Trademarks` varied across CB rank classes but were not statistically significant (p \> 0.05). This suggests limited evidence to support the hypothesis that IP investment alone strongly correlates with CB rank.\
+    -   **Other Factors:**\
+        Variables like `Number.of.Employees.Numeric` showed some statistical significance in distinguishing rank classes, indicating company size could be more influential than IP investment alone.
+3.  **Model Accuracy:**
+    -   Based on the confusion matrix, the model classified the CB rank perfectly within the training data (100% accuracy), which could indicate potential overfitting due to the high dimensionality of the industry variables.
+
+### **Limitations**
+
+1.  **High Dimensionality:**
+    -   The inclusion of numerous industry dummy variables created a high-dimensional feature space, likely leading to multicollinearity and overfitting. This may have reduced the reliability of the coefficients for `Log_Patents` and `Log_Trademarks`.
+2.  **Class Imbalance:**
+    -   If the CB rank classes ("High", "Medium", "Low") are imbalanced in the dataset, the model may favor the majority class, skewing predictions.
+3.  **Non-linear Relationships:**
+    -   Logistic regression assumes linear relationships between predictors and the log odds of the outcome. If the true relationships are non-linear, the model might fail to capture the complexity.
+4.  **Overfitting:**
+    -   Perfect classification within the training data suggests overfitting, limiting the generalizability of the model to new data.
+5.  **Lack of Interaction Terms:**
+    -   Potential interactions between variables (e.g., patents and industry type) were not considered, which might mask the combined effects on CB rank.
+
+## **Future Work**
+
+1.  **Feature Selection:**
+    -   Use dimensionality reduction techniques, such as LASSO regression, to identify the most impactful predictors and reduce multicollinearity.
+2.  **Balance the Data:**
+    -   Address class imbalance using techniques like SMOTE (Synthetic Minority Oversampling Technique) to improve model robustness.
+3.  **Explore Non-linear Models:**
+    -   Test non-linear models such as decision trees, random forests, or gradient boosting to better capture complex patterns in the data.
+4.  **Cross-validation:**
+    -   Implement k-fold cross-validation to assess the model's performance on unseen data and mitigate overfitting.
+5.  **Interaction Effects:**
+    -   Include interaction terms (e.g., patents × industry) to investigate combined effects on CB rank.
+6.  **Additional Data:**
+    -   Incorporate other potential predictors, such as market share or customer satisfaction, to enhance the explanatory power of the model.
+7.  **Validation on Test Data:**
+    -   Evaluate the model on a separate test dataset to assess generalizability.
+
+### **Conclusion**
+
+While the multinomial logistic regression model provided some insights into the predictors of CB rank, the hypothesis that IP investment strongly influences CB rank was not fully supported by the results. Limitations such as multicollinearity, overfitting, and potential non-linear effects suggest the need for alternative models and additional predictors. Future work should address these limitations to provide a more robust evaluation of the relationship between IP investment and CB rank.
